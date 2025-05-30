@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP8266 Sensor Data Dashboard</title>
+    <!-- เรียกใช้ไลบรารี่ต่างๆ ที่จำเป็น -->
+    <!-- Chart.js สำหรับแสดงกราฟ -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- ปลั๊กอินสำหรับแสดงป้ายกำกับข้อมูลบนกราฟ -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <!-- ปลั๊กอินสำหรับซูมและเลื่อนดูกราฟ -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    <!-- ไอคอน Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- ฟอนต์ Roboto และ Poppins -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght300;400;500;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- ไฟล์ CSS หลัก -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- โครงสร้างหลักของแดชบอร์ด -->
+    <div class="dashboard-layout">
+        <!-- เมนูด้านข้าง -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>CPA-TEMP</h3>
+            </div>
+            <div class="sidebar-content">
+                <!-- ปุ่มสำหรับเลือกห้อง -->
+                <div class="room-buttons">
+                    <button onclick="switchRoom('Room1')" id="btnRoom1" class="room-btn active">Room 1</button>
+                    <button onclick="switchRoom('Room2')" id="btnRoom2" class="room-btn">Room 2</button>
+                    <button onclick="switchRoom('Room3')" id="btnRoom3" class="room-btn">Room 3</button>
+                </div>
+                
+                <!-- ปุ่มจัดการห้อง (แสดงเฉพาะเมื่อล็อกอิน) -->
+                <button id="manageRoomsBtn" class="login-btn" style="margin-top: 20px; display: none;">Manage Rooms</button>
+            </div>
+            
+            <!-- ส่วนแสดงข้อมูลผู้ใช้หลังล็อกอิน -->
+            <div class="user-info" id="userInfo">
+                <p>Logged in as <span class="username" id="usernameDisplay"></span></p>
+            </div>
+            
+            <!-- ปุ่มล็อกอิน/ตั้งค่า/ล็อกเอาต์ -->
+            <button id="loginBtn" class="login-btn">Login</button>
+            <button id="settingsBtn" class="login-btn settings-btn" style="display: none;">Settings</button>
+            <button id="logoutBtn" class="logout-btn" style="display: none;">Logout</button>
+        </div>
+
+        <!-- เนื้อหาหลัก -->
+        <div class="main-content">
+            <!-- ส่วนหัวของแดชบอร์ด -->
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">Sensor Data Dashboard</h1>
+                <div class="dashboard-controls">
+                    <!-- ตัวเลือกช่วงเวลา -->
+                    <div class="time-selector">
+                        <select id="timePeriod">
+                            <option value="hour">1 ชั่วโมง</option>
+                            <option value="day">1 วัน</option>
+                            <option value="week">1 สัปดาห์</option>
+                            <option value="month">1 เดือน</option>
+                            <option value="3months">3 เดือน</option>
+                        </select>
+                    </div>
+
+                    <!-- สวิตช์เปิด/ปิดโหมดมืด -->
+                    <div class="theme-toggle">
+                        <span>Dark Mode</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="toggleDarkMode">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- สวิตช์กรองข้อมูลที่ผิดเกณฑ์ -->
+                    <div class="filter-toggle">
+                        <span>แสดงเฉพาะข้อมูลที่ผิดเกณฑ์</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="toggleFilter">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- การ์ดแสดงสถิติ -->
+            <div class="stats-container">
+                <!-- การ์ดสถิติอุณหภูมิ -->
+                <div class="stats-card temp-card">
+                    <h2 class="section-title">Temperature Statistics</h2>
+                    <div class="data-column">
+                        <!-- ส่วนหัวข้อมูลอุณหภูมิ -->
+                        <div class="data-header">
+                            <i class="fas fa-temperature-high"></i>
+                            <h3>Temperature (°C)</h3>
+                        </div>
+                        <!-- แสดงค่าสถิติต่างๆ ของอุณหภูมิ -->
+                        <div class="data-stat">
+                            <span class="data-stat-label">Minimum:</span>
+                            <span class="data-stat-value" id="minTemp">--</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Maximum:</span>
+                            <span class="data-stat-value" id="maxTemp">--</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Average:</span>
+                            <span class="data-stat-value" id="avgTemp">--</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Standard Deviation:</span>
+                            <span class="data-stat-value" id="stdDevTemp">--</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Trend:</span>
+                            <span class="data-stat-value" id="trendTemp">--</span>
+                        </div>
+                        <div class="graph-card temp-card">
+                            <canvas id="temperatureChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- การ์ดสถิติความชื้น -->
+                <div class="stats-card humid-card">
+                    <h2 class="section-title">Humidity Statistics</h2>
+                    <div class="data-column">
+                        <div class="data-header">
+                            <i class="fas fa-tint"></i>
+                            <h3>Humidity (%)</h3>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Minimum:</span>
+                            <span class="data-stat-value" id="minHumidity">--</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Maximum:</span>
+                            <span class="data-stat-value" id="maxHumidity">--</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Average:</span>
+                            <span class="data-stat-value" id="avgHumidity">--</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Standard Deviation:</span>
+                            <span class="data-stat-value" id="stdDevHumidity">--</span>
+                        </div>
+                        <div class="data-stat">
+                            <span class="data-stat-label">Trend:</span>
+                            <span class="data-stat-value" id="trendHumidity">--</span>
+                        </div>
+                        <div class="graph-card humid-card">
+                            <canvas id="humidityChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ส่วนแสดงตารางข้อมูล -->
+            <div class="tables-container">
+                <!-- ตารางข้อมูลอุณหภูมิ -->
+                <div class="table-card temp-card">
+                    <div class="table-header">
+                        <h3 class="table-title" id="tempTableTitle">Temperature Data (24 - 25°C)</h3>
+                    </div>
+                    <div class="table-search">
+                        <input type="text" id="searchBoxTemp" placeholder="ค้นหาตามวันที่หรือเวลา" />
+                    </div>
+                    <table id="temperatureTable">
+                        <thead>
+                            <tr>
+                                <th style="background-color: var(--temp-primary);">ลำดับ</th>
+                                <th style="background-color: var(--temp-primary);">Temperature</th>
+                                <th style="background-color: var(--temp-primary);">Datetime</th>
+                                <th style="background-color: var(--temp-primary);">สถานะ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Table data will be inserted here by JavaScript -->
+                        </tbody>
+                    </table>
+                    <div class="table-footer">
+                        <span class="table-info" id="tempTableInfo">แสดงเฉพาะข้อมูลที่ผิดเกณฑ์ 5 จาก 0 รายการ</span>
+                        <button type="button" class="load-more-btn temp-btn" id="loadMoreTemp">โหลดเพิ่ม (50 รายการ)</button>
+                    </div>
+                </div>
+
+                <!-- ตารางข้อมูลความชื้น -->
+                <div class="table-card humid-card">
+                    <div class="table-header">
+                        <h3 class="table-title" id="humidityTableTitle">Humidity Data (50 - 60 %)</h3>
+                    </div>
+                    <div class="table-search">
+                        <input type="text" id="searchBoxHumidity" placeholder="ค้นหาตามวันที่หรือเวลา" />
+                    </div>
+                    <table id="humidityTable">
+                        <thead>
+                            <tr>
+                                <th style="background-color: var(--humid-primary);">ลำดับ</th>
+                                <th style="background-color: var(--humid-primary);">Humidity</th>
+                                <th style="background-color: var(--humid-primary);">Datetime</th>
+                                <th style="background-color: var(--humid-primary);">สถานะ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Table data will be inserted here by JavaScript -->
+                        </tbody>
+                    </table>
+                    <div class="table-footer">
+                        <span class="table-info" id="humidTableInfo">แสดง 5 จาก 0 รายการ</span>
+                        <button type="button" class="load-more-btn humid-btn" id="loadMoreHumid">โหลดเพิ่ม (50 รายการ)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ปุ่มดาวน์โหลดข้อมูล -->
+            <button id="downloadBtn" class="download-btn">ดาวน์โหลดข้อมูล</button>
+        </div>
+    </div>
+
+    <!-- หน้าต่างแจ้งเตือน -->
+    <div class="popup" id="popup">
+        <div class="popup-content">
+            <span class="popup-close" id="popupClose">&times;</span>
+            <div class="popup-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h2>การแจ้งเตือน!</h2>
+            <p id="popupMessage" class="popup-message"></p>
+        </div>
+    </div>
+
+    <!-- โมดอลล็อกอิน/สมัครสมาชิก -->
+    <div class="auth-modal" id="authModal">
+        <div class="auth-modal-content">
+            <span class="auth-modal-close" id="authModalClose">&times;</span>
+            <div class="auth-tabs">
+                <div class="auth-tab active" id="loginTab">Login</div>
+                <div class="auth-tab" id="registerTab">Register</div>
+            </div>
+            
+            <!-- ฟอร์มล็อกอิน -->
+            <form class="auth-form active" id="loginForm">
+                <div class="form-group">
+                    <label for="loginUsername">Username</label>
+                    <input type="text" id="loginUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <button type="submit" class="auth-btn">Login</button>
+                <div class="auth-error" id="loginError"></div>
+            </form>
+            
+            <!-- ฟอร์มสมัครสมาชิก -->
+            <form class="auth-form" id="registerForm">
+                <div class="form-group">
+                    <label for="registerUsername">Username</label>
+                    <input type="text" id="registerUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerEmail">Email</label>
+                    <input type="email" id="registerEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Password</label>
+                    <input type="password" id="registerPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerConfirmPassword">Confirm Password</label>
+                    <input type="password" id="registerConfirmPassword" required>
+                </div>
+                <button type="submit" class="auth-btn">Register</button>
+                <div class="auth-error" id="registerError"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- โมดอลตั้งค่า -->
+    <div class="settings-modal" id="settingsModal">
+        <div class="settings-modal-content">
+            <span class="settings-modal-close" id="settingsModalClose">&times;</span>
+            <h2 class="settings-title">Room Threshold Settings</h2>
+            <p class="settings-description" style="text-align: center; color: #666; margin-bottom: 20px;">Room IDs are displayed for sensor connection reference</p>
+            
+            <!-- ฟอร์มตั้งค่า -->
+            <form class="settings-form" id="settingsForm">
+                <!-- เลือกห้อง -->
+                <div class="settings-group">
+                    <h3 class="settings-group-title">Select Room</h3>
+                    <div class="settings-field">
+                        <label for="roomSelect">Room</label>
+                        <select id="roomSelect" required>
+                            <!-- ตัวเลือกห้องจะถูกเพิ่มโดย JavaScript -->
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- ตั้งค่าขีดจำกัดอุณหภูมิ -->
+                <div class="settings-group">
+                    <h3 class="settings-group-title">Temperature Thresholds (°C)</h3>
+                    <div class="settings-row">
+                        <div class="settings-field">
+                            <label for="tempMin">Minimum</label>
+                            <input type="number" id="tempMin" step="0.1" required>
+                        </div>
+                        <div class="settings-field">
+                            <label for="tempMax">Maximum</label>
+                            <input type="number" id="tempMax" step="0.1" required>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ตั้งค่าขีดจำกัดความชื้น -->
+                <div class="settings-group">
+                    <h3 class="settings-group-title">Humidity Thresholds (%)</h3>
+                    <div class="settings-row">
+                        <div class="settings-field">
+                            <label for="humidityMin">Minimum</label>
+                            <input type="number" id="humidityMin" step="0.1" required>
+                        </div>
+                        <div class="settings-field">
+                            <label for="humidityMax">Maximum</label>
+                            <input type="number" id="humidityMax" step="0.1" required>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ตั้งค่าการแจ้งเตือนผ่าน Discord -->
+                <div class="settings-group">
+                    <h3 class="settings-group-title">Discord Notifications</h3>
+                    <div class="settings-field">
+                        <label for="discordWebhook">Discord Webhook URL</label>
+                        <input type="text" id="discordWebhook" placeholder="https://discord.com/api/webhooks/...">
+                    </div>
+                    <div class="discord-toggle">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="discordEnabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <label for="discordEnabled">Enable Discord notifications</label>
+                    </div>
+                </div>
+                
+                <button type="submit" class="settings-btn">Save Settings</button>
+                <div class="settings-error" id="settingsError"></div>
+                <div class="settings-success" id="settingsSuccess"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- โมดอลจัดการห้อง -->
+    <div class="room-modal" id="roomModal">
+        <div class="room-modal-content">
+            <span class="room-modal-close" id="roomModalClose">&times;</span>
+            <h2 class="room-title">Room Management</h2>
+            
+            <!-- แท็บสำหรับการจัดการห้อง -->
+            <div class="room-tabs">
+                <div class="room-tab active" id="addRoomTab">Add Room</div>
+                <div class="room-tab" id="editRoomTab">Edit Room</div>
+                <div class="room-tab" id="deleteRoomTab">Delete Room</div>
+            </div>
+            
+            <!-- ฟอร์มเพิ่มห้อง -->
+            <form class="room-form active" id="addRoomForm">
+                <div class="form-group">
+                    <label for="newRoomName">Room Name</label>
+                    <input type="text" id="newRoomName" required>
+                </div>
+                <button type="submit" class="room-btn">Add Room</button>
+                <div class="room-error" id="addRoomError"></div>
+                <div class="room-success" id="addRoomSuccess"></div>
+            </form>
+            
+            <!-- ฟอร์มแก้ไขห้อง -->
+            <form class="room-form" id="editRoomForm">
+                <div class="form-group">
+                    <label for="selectRoom">Select Room</label>
+                    <select id="selectRoom" required>
+                        <!-- Room options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editRoomName">New Room Name</label>
+                    <input type="text" id="editRoomName" required>
+                </div>
+                <button type="submit" class="room-btn">Update Room</button>
+                <div class="room-error" id="editRoomError"></div>
+                <div class="room-success" id="editRoomSuccess"></div>
+            </form>
+
+            <!-- ฟอร์มลบห้อง -->
+            <form class="room-form" id="deleteRoomForm">
+                <div class="form-group">
+                    <label for="deleteRoomSelect">Select Room to Delete</label>
+                    <select id="deleteRoomSelect" required>
+                        <!-- Room options will be populated by JavaScript -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="warning-message" style="color: var(--danger-color); margin: 15px 0; padding: 10px; border: 1px solid var(--danger-color); border-radius: var(--border-radius); background-color: var(--danger-bg);">
+                        <strong>Warning:</strong> This action cannot be undone! All sensor data for this room will also be deleted.
+                    </div>
+                </div>
+                <button type="submit" class="room-btn" style="background-color: var(--danger-color);">Delete Room</button>
+                <div class="room-error" id="deleteRoomError"></div>
+                <div class="room-success" id="deleteRoomSuccess"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- สคริปต์สำหรับจัดการกรณีที่ไม่มี Chart.js -->
+    <script>
+    // สร้าง mock object สำหรับ Chart.js เพื่อป้องกันข้อผิดพลาด
+    if (typeof Chart === 'undefined') {
+      window.Chart = class Chart {
+        constructor(ctx, config) {
+          this.ctx = ctx;
+          this.config = config;
+          this.data = config.data || {};
+          this.options = config.options || {};
+        }
+        update() {}
+      };
+    }
+
+    // ฟังก์ชันตรวจสอบตารางในฐานข้อมูล
+    function checkDatabaseTables() {
+      return fetch('check_tables.php')
+        .then(response => response.json())
+        .then(data => {
+          if (!data.success) {
+            console.error('Error checking database tables:', data.message);
+          } else if (data.created_tables && data.created_tables.length > 0) {
+            console.log('Created missing tables:', data.created_tables);
+          }
+          return data;
+        })
+        .catch(error => {
+          console.error('Error checking database tables:', error);
+        });
+    }
+    </script>
+
+    <!-- สคริปต์หลักสำหรับการโหลดแดชบอร์ด -->
+    <script>
+    // รอให้ DOM โหลดเสร็จสมบูรณ์
+    document.addEventListener('DOMContentLoaded', function() {
+      // แสดงตัวบ่งชี้การโหลด
+      document.body.insertAdjacentHTML('beforeend', 
+        '<div id="initialLoadingIndicator" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999;">' +
+        '<div style="background: white; padding: 20px; border-radius: 10px; text-align: center;">' +
+        '<div class="loading-spinner" style="display: inline-block; width: 40px; height: 40px; border: 4px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top-color: #4361ee; animation: spin 1s ease-in-out infinite;"></div>' +
+        '<p style="margin-top: 10px; font-weight: bold;">Loading dashboard...</p>' +
+        '</div></div>' +
+        '<style>@keyframes spin { to { transform: rotate(360deg); } }</style>'
+      );
+      
+      // ตรวจสอบตารางฐานข้อมูลก่อน
+      checkDatabaseTables().then(() => {
+        // โหลดสคริปต์หลัก
+        var script = document.createElement('script');
+        script.src = 'main.js';
+        script.type = 'text/javascript';
+        script.onload = function() {
+          // ลบตัวบ่งชี้การโหลดเมื่อโหลดสคริปต์เสร็จ
+          var loadingIndicator = document.getElementById('initialLoadingIndicator');
+          if (loadingIndicator) {
+            loadingIndicator.style.opacity = '0';
+            loadingIndicator.style.transition = 'opacity 0.5s';
+            setTimeout(function() {
+              loadingIndicator.remove();
+            }, 500);
+          }
+        };
+        document.body.appendChild(script);
+      });
+    });
+    </script>
+</body>
+</html>
